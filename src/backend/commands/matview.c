@@ -243,16 +243,18 @@ static Snapshot ivm_import_snapshot(const char *idstr);
 static void ExecuteTruncateGuts_IVM(Relation matviewRel, Oid matviewOid, Query *query);
 static void ivm_set_ts_persitent_name(TriggerData *trigdata, Oid relid, Oid mvid);
 RangeTblEntry* get_prestate_rte_atversion(RangeTblEntry *rte, MV_TriggerTable *table,
-				 QueryEnvironment *queryEnv, Oid matviewid, int64 version);
+				 QueryEnvironment *queryEnv, int64 version);
 
 static uint32 ivm_export_delta_table(Oid matview_id, Datum relids, int64 count);
 static bool ivm_deferred_maintenance_internal(Oid matviewOid, int64 previd, int64 currentid);
 Query* rewrite_query_for_preupdate_atversion(Query *query, List *tables,
-								  ParseState *pstate, Oid matviewid, int64 snapshotid);
+								  ParseState *pstate, int64 previd, int64 currid);
 RangeTblEntry* get_poststate_rte_atversion(RangeTblEntry *rte, MV_TriggerTable *table,
-				 QueryEnvironment *queryEnv, Oid matviewid, int64 version);
+				 QueryEnvironment *queryEnv,int64 version);
 Query* rewrite_query_atversion(Query *query, List *tables,
-						ParseState *pstate, Oid matviewid, int64 snapshotid);
+						ParseState *pstate, int64 snapshotid);
+static Query*
+rewrite_query_for_postupdate_atversion(Query *query, MV_TriggerTable *table, int rte_index);
 /*
  * SetMatViewPopulatedState
  *		Mark a materialized view as populated, or not.
@@ -4013,7 +4015,7 @@ ivm_deferred_maintenance_internal(Oid matviewOid, int64 previd, int64 currentid)
 	if (event & IVM_EVENT_TRUNCATE)
 	{
 		// rewritten = rewrite_query_atversion(rewritten, entry->tables,
-		// 									pstate, matviewOid, currentid);
+		// 									pstate, currentid);
 		MemoryContextSwitchTo(oldcxt);
 
 		ExecuteTruncateGuts_IVM(matviewRel, matviewOid, query);
@@ -4056,10 +4058,8 @@ ivm_deferred_maintenance_internal(Oid matviewOid, int64 previd, int64 currentid)
 	 * Step1: collect transition tables in QEs and
 	 * Set all tables in the query to pre-update state and
 	 */
-	// rewritten = rewrite_query_atversion(rewritten, entry->tables,
-	// 									pstate, matviewOid, currentid);
-	rewritten = rewrite_query_for_preupdate_state(rewritten, entry->tables,
-												  pstate, matviewOid);
+	rewritten = rewrite_query_for_preupdate_atversion(rewritten, entry->tables,
+												  pstate, previd, currentid);
 	/* Rewrite for counting duplicated tuples and aggregates functions*/
 	rewritten = rewrite_query_for_counting_and_aggregates(rewritten, pstate);
 
@@ -4123,7 +4123,7 @@ ivm_deferred_maintenance_internal(Oid matviewOid, int64 previd, int64 currentid)
 						&tupdesc_new, queryEnv);
 
 			/* Set the table in the query to post-update state */
-			rewritten = rewrite_query_for_postupdate_state(rewritten, table, rte_index);
+			rewritten = rewrite_query_for_postupdate_atversion(rewritten, table, rte_index);
 
 			PG_TRY();
 			{
@@ -4392,7 +4392,7 @@ pg_export_delta_table(PG_FUNCTION_ARGS)
 */
 RangeTblEntry*
 get_prestate_rte_atversion(RangeTblEntry *rte, MV_TriggerTable *table,
-				 QueryEnvironment *queryEnv, Oid matviewid, int64 version)
+				 QueryEnvironment *queryEnv, int64 version)
 {
 	StringInfoData str;
 	RawStmt *raw;
@@ -4401,8 +4401,6 @@ get_prestate_rte_atversion(RangeTblEntry *rte, MV_TriggerTable *table,
 	ParseState *pstate;
 	char *relname;
 	ListCell *lc;
-
-	Assert(rte->rtekind == RTE_SUBQUERY);
 
 	pstate = make_parsestate(NULL);
 	pstate->p_queryEnv = queryEnv;
@@ -4419,10 +4417,15 @@ get_prestate_rte_atversion(RangeTblEntry *rte, MV_TriggerTable *table,
 	table_close(rel, NoLock);
 
 	initStringInfo(&str);
+#if 0
 	appendStringInfo(&str,
 			"SELECT * FROM %s@%ld ",
 				relname, version);
-
+#else
+	appendStringInfo(&str,
+			"SELECT * FROM %s TABLESAMPLE BERNOULLI (10) REPEATABLE (1)",
+				relname);
+#endif
 	/*
 	 * Append deleted rows contained in old transition tables.
 	 */
@@ -4439,7 +4442,7 @@ get_prestate_rte_atversion(RangeTblEntry *rte, MV_TriggerTable *table,
 	subquery = transformStmt(pstate, raw->stmt);
 
 	/* save the original RTE */
-	//table->original_rte = copyObject(rte);
+	table->original_rte = copyObject(rte);
 	rte->rtekind = RTE_SUBQUERY;
 	rte->subquery = subquery;
 
@@ -4447,7 +4450,7 @@ get_prestate_rte_atversion(RangeTblEntry *rte, MV_TriggerTable *table,
 	rte->relid = InvalidOid;
 	rte->relkind = 0;
 	rte->rellockmode = 0;
-	rte->tablesample = NULL;
+	//rte->tablesample = NULL;
 	rte->inh = false;			/* must not be set for a subquery */
 	rte->security_barrier = false;
 
@@ -4460,7 +4463,7 @@ get_prestate_rte_atversion(RangeTblEntry *rte, MV_TriggerTable *table,
  */
 Query*
 rewrite_query_for_preupdate_atversion(Query *query, List *tables,
-								  ParseState *pstate, Oid matviewid, int64 snapshotid)
+								  ParseState *pstate, int64 previd, int64 currid)
 {
 	ListCell *lc;
 	int num_rte = list_length(query->rtable);
@@ -4493,7 +4496,9 @@ rewrite_query_for_preupdate_atversion(Query *query, List *tables,
 				bool  hasRowSecurity;
 				bool  hasSubLinks;
 
-				RangeTblEntry *rte_pre = get_prestate_rte_atversion(r, table, pstate->p_queryEnv, matviewid, snapshotid);
+				RangeTblEntry *rte_pre = get_prestate_rte_atversion(r, table, pstate->p_queryEnv, previd);
+
+				get_poststate_rte_atversion(table->original_rte, table, pstate->p_queryEnv, currid);
 				/*
 				 * Set a row security poslicies of the modified table to the subquery RTE which
 				 * represents the pre-update state of the table.
@@ -4514,7 +4519,13 @@ rewrite_query_for_preupdate_atversion(Query *query, List *tables,
 				lfirst(lc) = rte_pre;
 
 				table->rte_indexes = list_append_unique_int(table->rte_indexes, i);
-				break;
+				//break;
+			}
+			else
+			{
+				//FIXME: post version
+				RangeTblEntry *rte_post = get_poststate_rte_atversion(r, table, pstate->p_queryEnv, currid);
+				lfirst(lc) = rte_post;
 			}
 		}
 
@@ -4534,7 +4545,7 @@ rewrite_query_for_preupdate_atversion(Query *query, List *tables,
 */
 RangeTblEntry*
 get_poststate_rte_atversion(RangeTblEntry *rte, MV_TriggerTable *table,
-				 QueryEnvironment *queryEnv, Oid matviewid, int64 version)
+				 QueryEnvironment *queryEnv, int64 version)
 {
 	StringInfoData str;
 	RawStmt *raw;
@@ -4558,10 +4569,15 @@ get_poststate_rte_atversion(RangeTblEntry *rte, MV_TriggerTable *table,
 	table_close(rel, NoLock);
 
 	initStringInfo(&str);
+#if 0
 	appendStringInfo(&str,
 			"SELECT * FROM %s@%ld ",
 				relname, version);
-
+#else
+	appendStringInfo(&str,
+			"SELECT * FROM %s TABLESAMPLE BERNOULLI (10) REPEATABLE (1)",
+				relname);
+#endif
 	/* Get a subquery representing pre-state of the table */
 	raw = (RawStmt*)linitial(raw_parser(str.data, RAW_PARSE_DEFAULT));
 	subquery = transformStmt(pstate, raw->stmt);
@@ -4577,19 +4593,21 @@ get_poststate_rte_atversion(RangeTblEntry *rte, MV_TriggerTable *table,
 	rte->relid = InvalidOid;
 	rte->relkind = 0;
 	rte->rellockmode = 0;
-	rte->tablesample = NULL;
+	//rte->tablesample = NULL;
 	rte->inh = false;			/* must not be set for a subquery */
 
 	table->version_rte = rte; // for debug
+
 	return rte;
 }
 
+#if 0
 /*
  * Rewrite the query for post-update at a specific version.
  */
 Query*
 rewrite_query_atversion(Query *query, List *tables,
-								  ParseState *pstate, Oid matviewid, int64 snapshotid)
+								  ParseState *pstate, int64 snapshotid)
 {
 	ListCell *lc;
 	int num_rte = list_length(query->rtable);
@@ -4611,7 +4629,7 @@ rewrite_query_atversion(Query *query, List *tables,
 				bool  hasRowSecurity;
 				bool  hasSubLinks;
 
-				RangeTblEntry *version_pre = get_poststate_rte_atversion(r, table, pstate->p_queryEnv, matviewid, snapshotid);
+				RangeTblEntry *version_pre = get_poststate_rte_atversion(r, table, pstate->p_queryEnv, snapshotid);
 				/*
 				 * Set a row security poslicies of the modified table to the subquery RTE which
 				 * represents the pre-update state of the table.
@@ -4631,7 +4649,7 @@ rewrite_query_atversion(Query *query, List *tables,
 				version_pre->securityQuals = securityQuals;
 				lfirst(lc) = version_pre;
 
-				//table->rte_indexes = list_append_unique_int(table->rte_indexes, i);
+				table->rte_indexes = list_append_unique_int(table->rte_indexes, i);
 				break;
 			}
 		}
@@ -4643,20 +4661,21 @@ rewrite_query_atversion(Query *query, List *tables,
 
 	return query;
 }
+#endif
 
-#if 0
 static Query*
-rewrite_query_for_postversion_state(Query *query, MV_TriggerTable *table, int rte_index)
+rewrite_query_for_postupdate_atversion(Query *query, MV_TriggerTable *table, int rte_index)
 {
 	ListCell *lc = list_nth_cell(query->rtable, rte_index - 1);
 
 	/* Retore the version RTE */
 	lfirst(lc) = table->version_rte;
+	Assert(table->version_rte);
 
 	return query;
 }
 
-
+#if 0
 bool
 is_matview_latest(Oid matviewOid)
 {
