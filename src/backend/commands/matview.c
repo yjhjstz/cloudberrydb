@@ -251,8 +251,8 @@ Query* rewrite_query_for_preupdate_atversion(Query *query, List *tables,
 								  ParseState *pstate, int64 previd, int64 currid);
 RangeTblEntry* get_poststate_rte_atversion(RangeTblEntry *rte, MV_TriggerTable *table,
 				 QueryEnvironment *queryEnv,int64 version);
-Query* rewrite_query_atversion(Query *query, List *tables,
-						ParseState *pstate, int64 snapshotid);
+static Query* rewrite_query_atversion(Query *query, List *tables,
+						ParseState *pstate, int64 currid);
 static Query*
 rewrite_query_for_postupdate_atversion(Query *query, MV_TriggerTable *table, int rte_index);
 /*
@@ -3975,6 +3975,7 @@ ivm_deferred_maintenance_internal(Oid matviewOid, int64 previd, int64 currentid)
 			table->new_tuplestores = lappend(table->new_tuplestores, tg_newtable);
 			entry->has_new = true;
 		}
+		//event = IVM_EVENT_TRUNCATE;
 	}
 
 	matviewRel = table_open(matviewOid, AccessShareLock);
@@ -4014,11 +4015,11 @@ ivm_deferred_maintenance_internal(Oid matviewOid, int64 previd, int64 currentid)
 	//FIXME: fix truncate case
 	if (event & IVM_EVENT_TRUNCATE)
 	{
-		// rewritten = rewrite_query_atversion(rewritten, entry->tables,
-		// 									pstate, currentid);
+		rewritten = rewrite_query_atversion(query, entry->tables,
+											pstate, currentid);
 		MemoryContextSwitchTo(oldcxt);
 
-		ExecuteTruncateGuts_IVM(matviewRel, matviewOid, query);
+		ExecuteTruncateGuts_IVM(matviewRel, matviewOid, rewritten);
 
 		/* Clean up hash entry and delete tuplestores */
 		clean_up_IVM_hash_entry(entry, false);
@@ -4601,13 +4602,12 @@ get_poststate_rte_atversion(RangeTblEntry *rte, MV_TriggerTable *table,
 	return rte;
 }
 
-#if 0
 /*
  * Rewrite the query for post-update at a specific version.
  */
-Query*
+static Query*
 rewrite_query_atversion(Query *query, List *tables,
-								  ParseState *pstate, int64 snapshotid)
+						ParseState *pstate, int64 currid)
 {
 	ListCell *lc;
 	int num_rte = list_length(query->rtable);
@@ -4624,33 +4624,8 @@ rewrite_query_atversion(Query *query, List *tables,
 
 			if (r->relid == table->table_id)
 			{
-				List *securityQuals;
-				List *withCheckOptions;
-				bool  hasRowSecurity;
-				bool  hasSubLinks;
-
-				RangeTblEntry *version_pre = get_poststate_rte_atversion(r, table, pstate->p_queryEnv, snapshotid);
-				/*
-				 * Set a row security poslicies of the modified table to the subquery RTE which
-				 * represents the pre-update state of the table.
-				 */
-				get_row_security_policies(query, table->original_rte, i,
-										  &securityQuals, &withCheckOptions,
-										  &hasRowSecurity, &hasSubLinks);
-
-				if (hasRowSecurity)
-				{
-					query->hasRowSecurity = true;
-					version_pre->security_barrier = true;
-				}
-				if (hasSubLinks)
-					query->hasSubLinks = true;
-
-				version_pre->securityQuals = securityQuals;
+				RangeTblEntry *version_pre = get_poststate_rte_atversion(r, table, pstate->p_queryEnv, currid);
 				lfirst(lc) = version_pre;
-
-				table->rte_indexes = list_append_unique_int(table->rte_indexes, i);
-				break;
 			}
 		}
 
@@ -4661,7 +4636,6 @@ rewrite_query_atversion(Query *query, List *tables,
 
 	return query;
 }
-#endif
 
 static Query*
 rewrite_query_for_postupdate_atversion(Query *query, MV_TriggerTable *table, int rte_index)
