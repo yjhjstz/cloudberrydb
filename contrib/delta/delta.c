@@ -119,7 +119,7 @@ pg_delta_change(DeltaOutputCtx *ctx,
 
 	for (int i = 0; i < tupdesc->natts; i++)
 	{
-		values[i] = random();
+		values[i] = random() % 3;
 		nulls[i] = false;
 	}
 
