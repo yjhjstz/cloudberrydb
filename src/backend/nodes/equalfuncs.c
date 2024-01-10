@@ -134,6 +134,7 @@ _equalRangeVar(const RangeVar *a, const RangeVar *b)
 	COMPARE_SCALAR_FIELD(relpersistence);
 	COMPARE_NODE_FIELD(alias);
 	COMPARE_LOCATION_FIELD(location);
+	COMPARE_NODE_FIELD(asofTimestamp);
 
 	return true;
 }
@@ -3045,6 +3046,7 @@ _equalRangeTblEntry(const RangeTblEntry *a, const RangeTblEntry *b)
 	COMPARE_BITMAPSET_FIELD(updatedCols);
 	COMPARE_BITMAPSET_FIELD(extraUpdatedCols);
 	COMPARE_NODE_FIELD(securityQuals);
+	COMPARE_NODE_FIELD(asofTimestamp);
 
 	return true;
 }

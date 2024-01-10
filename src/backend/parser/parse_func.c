@@ -2652,6 +2652,7 @@ check_srf_call_placement(ParseState *pstate, Node *last_srf, int location)
 			break;
 		case EXPR_KIND_LIMIT:
 		case EXPR_KIND_OFFSET:
+		case EXPR_KIND_ASOF:
 			errkind = true;
 			break;
 		case EXPR_KIND_RETURNING:

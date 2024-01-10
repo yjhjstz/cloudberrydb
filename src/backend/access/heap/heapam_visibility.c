@@ -63,6 +63,7 @@
 
 #include "postgres.h"
 
+#include "access/commit_ts.h"
 #include "access/heapam.h"
 #include "access/htup_details.h"
 #include "access/multixact.h"
@@ -1183,6 +1184,20 @@ HeapTupleSatisfiesMVCC(Relation relation, HeapTuple htup, Snapshot snapshot,
 			}
 			if (snapshotCheckResult == XID_IN_SNAPSHOT)
 				return false;			/* treat as still in progress */
+			if (snapshot->asofTimestamp != 0)
+			{
+				TimestampTz ts;
+				bool ret;
+				if (TransactionIdGetCommitTsData(HeapTupleHeaderGetRawXmin(tuple), &ts, NULL))
+				{
+					ret = timestamptz_cmp_internal(snapshot->asofTimestamp, ts) > 0;
+					elog(INFO, "HeapTupleSatisfiesMVCC: xid %u, asofTimestamp %ld, ts %ld, ret %d",
+						HeapTupleHeaderGetRawXmin(tuple), timestamptz_to_time_t(snapshot->asofTimestamp),
+						timestamptz_to_time_t(ts), ret);
+					if (ret == false)
+						return false;
+				}
+			}
 		}
 	}
 

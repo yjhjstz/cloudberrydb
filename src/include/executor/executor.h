@@ -719,4 +719,6 @@ extern ResultRelInfo *ExecLookupResultRelByOid(ModifyTableState *node,
 											   bool missing_ok,
 											   bool update_cache);
 
+extern void ExecAsofTimestamp(EState* estate, ScanState* ss);
+
 #endif							/* EXECUTOR_H  */

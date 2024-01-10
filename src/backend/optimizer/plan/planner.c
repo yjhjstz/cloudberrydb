@@ -118,6 +118,7 @@ create_upper_paths_hook_type create_upper_paths_hook = NULL;
 #define EXPRKIND_TABLEFUNC			11
 #define EXPRKIND_TABLEFUNC_LATERAL	12
 #define EXPRKIND_WINDOW_BOUND		13
+#define EXPRKIND_ASOF               14
 
 /* Passthrough data for standard_qp_callback */
 typedef struct

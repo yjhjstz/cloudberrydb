@@ -74,6 +74,7 @@ typedef struct RangeVar
 								 * on children? */
 	char		relpersistence; /* see RELPERSISTENCE_* in pg_class.h */
 	Alias	   *alias;			/* table alias & optional column aliases */
+	Node       *asofTimestamp;  /* expression with AS OF timestamp */
 	int			location;		/* token location, or -1 if unknown */
 } RangeVar;
 

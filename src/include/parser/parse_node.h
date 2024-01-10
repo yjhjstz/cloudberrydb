@@ -84,6 +84,7 @@ typedef enum ParseExprKind
 
 	/* GPDB additions */
 	EXPR_KIND_SCATTER_BY,		/* SCATTER BY expression */
+	EXPR_KIND_ASOF,				/* AS OF */
 } ParseExprKind;
 
 

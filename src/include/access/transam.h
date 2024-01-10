@@ -34,6 +34,7 @@
 #define FrozenTransactionId			((TransactionId) 2)
 #define FirstNormalTransactionId	((TransactionId) 3)
 #define MaxTransactionId			((TransactionId) 0xFFFFFFFF)
+#define MaxTimeTravelPeriod         ((TransactionId) 0x3FFFFFFF)
 
 /* ----------------
  *		transaction ID manipulation macros

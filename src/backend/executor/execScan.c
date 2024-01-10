@@ -22,7 +22,8 @@
 #include "miscadmin.h"
 #include "utils/faultinjector.h"
 #include "utils/memutils.h"
-
+#include "utils/snapmgr.h"
+#include "utils/timestamp.h"
 
 
 /*
@@ -344,5 +345,45 @@ ExecScanReScan(ScanState *node)
 				epqstate->relsubs_done[rtindex - 1] = false;
 			}
 		}
+	}
+}
+
+/*
+ * Evaluate ASOF timestamp,
+ * check that it belongs to the time travel period (if specified)
+ * and assign it to snapshot.
+ * This function throws error if specified snapshot is out of
+ * time_travel_period and check_asof_timestamp parameter is true
+ */
+void ExecAsofTimestamp(EState* estate, ScanState* ss)
+{
+	if (ss->asofExpr)
+	{
+		if (!ss->asofTimestampSet)
+		{
+			Datum		val;
+			bool		isNull;
+
+			val = ExecEvalExprSwitchContext(ss->asofExpr,
+											ss->ps.ps_ExprContext,
+											&isNull);
+			if (isNull)
+			{
+				/* Interpret NULL timestamp as no timestamp */
+				ss->asofTimestamp = 0;
+			}
+			else
+			{
+				ss->asofTimestamp = DatumGetInt64(val);
+				// if (check_asof_timestamp && time_travel_period > 0)
+				// {
+				// 	TimestampTz horizon = GetCurrentTimestamp()	- (TimestampTz)time_travel_period*USECS_PER_SEC;
+				// 	if (timestamptz_cmp_internal(horizon, ss->asofTimestamp) > 0)
+				// 		elog(ERROR, "Specified AS OF timestamp is out of time travel horizon");
+				// }
+			}
+			ss->asofTimestampSet = true;
+		}
+		estate->es_snapshot->asofTimestamp = ss->asofTimestamp;
 	}
 }

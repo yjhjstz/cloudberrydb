@@ -639,6 +639,7 @@ create_scan_plan(PlannerInfo *root, Path *best_path, int flags)
 	List	   *gating_clauses;
 	List	   *tlist;
 	Plan	   *plan;
+	RangeTblEntry *rte;
 
 	/*
 	 * Extract the relevant restriction clauses from the parent relation. The
@@ -873,6 +874,11 @@ create_scan_plan(PlannerInfo *root, Path *best_path, int flags)
 		DirectDispatchUpdateContentIdsFromPlan(root, plan);
 
 	plan->locustype = best_path->locus.locustype;
+	if (plan != NULL)
+	{
+		rte = planner_rt_fetch(rel->relid, root);
+		((Scan*)plan)->asofTimestamp = rte->asofTimestamp;
+	}
 	/*
 	 * If there are any pseudoconstant clauses attached to this node, insert a
 	 * gating Result node that evaluates the pseudoconstants as one-time

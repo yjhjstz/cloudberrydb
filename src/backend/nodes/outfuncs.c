@@ -426,6 +426,7 @@ _outScanInfo(StringInfo str, const Scan *node)
 	_outPlanInfo(str, (const Plan *) node);
 
 	WRITE_UINT_FIELD(scanrelid);
+	WRITE_NODE_FIELD(asofTimestamp);
 }
 
 /*
@@ -3576,6 +3577,7 @@ _outRangeTblEntry(StringInfo str, const RangeTblEntry *node)
 	WRITE_BITMAPSET_FIELD(updatedCols);
 	WRITE_BITMAPSET_FIELD(extraUpdatedCols);
 	WRITE_NODE_FIELD(securityQuals);
+	WRITE_NODE_FIELD(asofTimestamp);
 
 	WRITE_BOOL_FIELD(forceDistRandom);
 }

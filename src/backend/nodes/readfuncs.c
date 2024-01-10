@@ -1530,6 +1530,7 @@ _readRangeTblEntry(void)
 	READ_BITMAPSET_FIELD(updatedCols);
 	READ_BITMAPSET_FIELD(extraUpdatedCols);
 	READ_NODE_FIELD(securityQuals);
+	READ_NODE_FIELD(asofTimestamp);
 
 	READ_BOOL_FIELD(forceDistRandom);
 
@@ -1886,6 +1887,7 @@ ReadCommonScan(Scan *local_node)
 	ReadCommonPlan(&local_node->plan);
 
 	READ_UINT_FIELD(scanrelid);
+	READ_NODE_FIELD(asofTimestamp);
 }
 
 /*

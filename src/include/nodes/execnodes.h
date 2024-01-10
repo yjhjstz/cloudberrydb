@@ -1529,6 +1529,9 @@ typedef struct ScanState
 	Relation	ss_currentRelation;
 	struct TableScanDescData *ss_currentScanDesc;
 	TupleTableSlot *ss_ScanTupleSlot;
+	ExprState  *asofExpr;	      /* AS OF expression */
+	bool        asofTimestampSet; /* As OF timestamp evaluated */
+	TimestampTz asofTimestamp;    /* AS OF timestamp or 0 if not set */
 } ScanState;
 
 /* ----------------

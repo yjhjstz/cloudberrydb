@@ -1514,6 +1514,7 @@ addRangeTableEntry(ParseState *pstate,
 	rte->relkind = rel->rd_rel->relkind;
 	rte->rellockmode = lockmode;
 	rte->relisivm = rel->rd_rel->relisivm != MATVIEW_IVM_NOTHING ? true : false;
+	rte->asofTimestamp = relation->asofTimestamp;
 
 	/*
 	 * Build the list of effective column names using user-supplied aliases

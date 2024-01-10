@@ -545,6 +545,7 @@ static void check_expressions_in_partition_key(PartitionSpec *spec, core_yyscan_
 %type <node>	fetch_args select_limit_value
 				offset_clause select_offset_value
 				select_fetch_first_value I_or_F_const
+				opt_asof_clause
 %type <ival>	row_or_rows first_or_next
 
 %type <list>	OptSeqOptList SeqOptList OptParenthesizedSeqOptList
@@ -904,7 +905,7 @@ static void check_expressions_in_partition_key(PartitionSpec *spec, core_yyscan_
  * as NOT, at least with respect to their left-hand subexpression.
  * NULLS_LA and WITH_LA are needed to make the grammar LALR(1).
  */
-%token		NOT_LA NULLS_LA WITH_LA
+%token		NOT_LA NULLS_LA WITH_LA AS_LA
 %token		PARTITION_TAIL
 
 /*
@@ -15146,9 +15147,10 @@ from_list:
 /*
  * table_ref is where an alias clause can be attached.
  */
-table_ref:	relation_expr opt_alias_clause
+table_ref:	relation_expr opt_alias_clause opt_asof_clause
 				{
 					$1->alias = $2;
+					$1->asofTimestamp = $3;
 					$$ = (Node *) $1;
 				}
 			| relation_expr opt_alias_clause tablesample_clause
@@ -15404,6 +15406,10 @@ opt_alias_clause_for_join_using:
 					$$->aliasname = $2;
 					/* the column name list will be inserted later */
 				}
+			| /*EMPTY*/								{ $$ = NULL; }
+		;
+
+opt_asof_clause: AS_LA OF a_expr                    { $$ = $3; }
 			| /*EMPTY*/								{ $$ = NULL; }
 		;
 

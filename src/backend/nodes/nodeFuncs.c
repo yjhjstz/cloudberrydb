@@ -2453,6 +2453,32 @@ expression_tree_walker(Node *node,
 					return true;
 			}
 			break;
+		case T_A_Expr:
+			{
+				A_Expr	*ae = (A_Expr *) node;
+				if (walker(ae->lexpr, context))
+					return true;
+				if (walker(ae->rexpr, context))
+					return true;
+			}
+			break;
+		case T_FuncCall:
+			{
+				FuncCall   *fcall = (FuncCall *) node;
+
+				if (walker(fcall->args, context))
+					return true;
+				if (walker(fcall->agg_order, context))
+					return true;
+				if (walker(fcall->agg_filter, context))
+					return true;
+				if (walker(fcall->over, context))
+					return true;
+				/* function name is deemed uninteresting */
+			}
+			break;
+		case T_A_Const:
+			break;
 		default:
 			elog(ERROR, "unrecognized node type: %d",
 				 (int) nodeTag(node));
@@ -2690,6 +2716,8 @@ range_table_entry_walker(RangeTblEntry *rte,
 	}
 
 	if (walker(rte->securityQuals, context))
+		return true;
+	if (walker(rte->asofTimestamp, context))
 		return true;
 
 	if (flags & QTW_EXAMINE_RTES_AFTER)
@@ -3561,6 +3589,49 @@ expression_tree_mutator(Node *node,
 				return (Node *) newgathermerge;
 			}
 			break;
+		case T_A_Expr:
+			{
+				A_Expr	   *aexpr = (A_Expr *) node;
+				A_Expr	   *newnode;
+
+				FLATCOPY(newnode, aexpr, A_Expr);
+				MUTATE(newnode->lexpr, aexpr->lexpr, Node *);
+				MUTATE(newnode->rexpr, aexpr->rexpr, Node *);
+				return (Node *) newnode;
+			}
+			break;
+		case T_FuncCall:
+			{
+				FuncCall   *fc = (FuncCall *) node;
+				FuncCall   *newnode;
+
+				FLATCOPY(newnode, fc, FuncCall);
+				MUTATE(newnode->args, fc->args, List *);
+				MUTATE(newnode->agg_order, fc->agg_order, List *);
+				MUTATE(newnode->agg_filter, fc->agg_filter, Node *);
+				MUTATE(newnode->over, fc->over, WindowDef *);
+				return (Node *) newnode;
+			}
+			break;
+		case T_TypeCast:
+			{
+				TypeCast   *tc = (TypeCast *) node;
+				TypeCast   *newnode;
+
+				FLATCOPY(newnode, tc, TypeCast);
+				MUTATE(newnode->arg, tc->arg, Node *);
+				return (Node *) newnode;
+			}
+			break;
+		case T_A_Const:
+			{
+				A_Const    *ac = (A_Const *) node;
+				A_Const    *newnode;
+
+				FLATCOPY(newnode, ac, A_Const);
+				return (Node *) newnode;
+			}
+			break;
 		default:
 			elog(ERROR, "unrecognized node type: %d",
 				 (int) nodeTag(node));
@@ -3735,6 +3806,7 @@ range_table_entry_mutator(RangeTblEntry *rte, Node *(*mutator)(), void *context,
 			break;
 	}
 	MUTATE(newrte->securityQuals, rte->securityQuals, List *);
+	MUTATE(newrte->asofTimestamp, rte->asofTimestamp, Node *);
 	return (Node *)newrte;
 }
 

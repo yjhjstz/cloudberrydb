@@ -61,6 +61,7 @@ SeqNext(SeqScanState *node)
 	EState	   *estate;
 	ScanDirection direction;
 	TupleTableSlot *slot;
+	TimestampTz     outerAsofTimestamp;
 
 	/*
 	 * get information from the estate and scan state
@@ -69,6 +70,9 @@ SeqNext(SeqScanState *node)
 	estate = node->ss.ps.state;
 	direction = estate->es_direction;
 	slot = node->ss.ss_ScanTupleSlot;
+
+	outerAsofTimestamp = estate->es_snapshot->asofTimestamp;
+	ExecAsofTimestamp(estate, &node->ss);
 
 	if (scandesc == NULL)
 	{
@@ -151,7 +155,11 @@ SeqNext(SeqScanState *node)
 	 * get the next tuple from the table
 	 */
 	if (table_scan_getnextslot(scandesc, direction, slot))
+	{
+		estate->es_snapshot->asofTimestamp = outerAsofTimestamp;
 		return slot;
+	}
+	estate->es_snapshot->asofTimestamp = outerAsofTimestamp;
 	return NULL;
 }
 
@@ -255,6 +263,17 @@ ExecInitSeqScanForPartition(SeqScan *node, EState *estate,
 	scanstate->ss.ps.qual =
 		ExecInitQual(node->plan.qual, (PlanState *) scanstate);
 
+	/*
+	 * Initlialize AS OF expression of any
+	 */
+	if (node->asofTimestamp)
+	{
+		scanstate->ss.asofExpr = ExecInitExpr((Expr *) node->asofTimestamp,
+											&scanstate->ss.ps);
+		scanstate->ss.asofTimestampSet = false;
+	}
+	else
+		scanstate->ss.asofExpr = NULL;
 	return scanstate;
 }
 
@@ -310,6 +329,7 @@ ExecReScanSeqScan(SeqScanState *node)
 	TableScanDesc scan;
 
 	scan = node->ss.ss_currentScanDesc;
+	node->ss.asofTimestampSet = false;
 
 	if (scan != NULL)
 		table_rescan(scan,		/* scan desc */

@@ -512,8 +512,15 @@ transformJoinOnClause(ParseState *pstate, JoinExpr *j, List *namespace)
 static ParseNamespaceItem *
 transformTableEntry(ParseState *pstate, RangeVar *r)
 {
+	ParseNamespaceItem *nsitem;
 	/* addRangeTableEntry does all the work */
-	return addRangeTableEntry(pstate, r, r->alias, r->inh, true);
+	nsitem = addRangeTableEntry(pstate, r, r->alias, r->inh, true);
+	if (r->asofTimestamp)
+	{
+		Node* asof = transformExpr(pstate, r->asofTimestamp, EXPR_KIND_ASOF);
+		nsitem->p_rte->asofTimestamp = coerce_to_specific_type(pstate, asof, TIMESTAMPTZOID, "ASOF");
+	}
+	return nsitem;
 }
 
 /*

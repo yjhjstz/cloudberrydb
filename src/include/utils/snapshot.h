@@ -209,6 +209,7 @@ typedef struct SnapshotData
 	pairingheap_node ph_node;	/* link in the RegisteredSnapshots heap */
 
 	TimestampTz whenTaken;		/* timestamp when snapshot was taken */
+	TimestampTz asofTimestamp;	/* select AS OF timestamp */
 	XLogRecPtr	lsn;			/* position in the WAL stream when taken */
 
 	/*

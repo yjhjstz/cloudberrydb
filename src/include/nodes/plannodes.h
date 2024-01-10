@@ -553,7 +553,8 @@ typedef struct BitmapOr
 typedef struct Scan
 {
 	Plan		plan;
-	Index		scanrelid;		/* relid is index into the range table */
+	Index		scanrelid;	   /* relid is index into the range table */
+	Node       *asofTimestamp; /* AS OF timestamp */
 } Scan;
 
 /* ----------------

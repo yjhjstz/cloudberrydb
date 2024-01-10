@@ -81,6 +81,9 @@
  * GUC parameters
  */
 int			old_snapshot_threshold; /* number of minutes, -1 disables */
+int         time_travel_period;     /* number of seconds, 0 disables, -1 infinite */
+bool        check_asof_timestamp;   /* should we throw error if specified timestamp is out of time_travel_period */
+
 
 volatile OldSnapshotControlData *oldSnapshotControl;
 
@@ -195,6 +198,7 @@ typedef struct SerializedSnapshotData
 	bool		takenDuringRecovery;
 	CommandId	curcid;
 	TimestampTz whenTaken;
+	TimestampTz asofTimestamp;
 	XLogRecPtr	lsn;
 
 	bool		haveDistribSnapshot;
@@ -2258,6 +2262,7 @@ SerializeSnapshot(Snapshot snapshot, char *start_address)
 	serialized_snapshot.takenDuringRecovery = snapshot->takenDuringRecovery;
 	serialized_snapshot.curcid = snapshot->curcid;
 	serialized_snapshot.whenTaken = snapshot->whenTaken;
+	serialized_snapshot.asofTimestamp = snapshot->asofTimestamp;
 	serialized_snapshot.lsn = snapshot->lsn;
 
 	serialized_snapshot.haveDistribSnapshot = snapshot->haveDistribSnapshot;
@@ -2372,6 +2377,7 @@ RestoreSnapshot(char *start_address)
 	snapshot->takenDuringRecovery = serialized_snapshot.takenDuringRecovery;
 	snapshot->curcid = serialized_snapshot.curcid;
 	snapshot->whenTaken = serialized_snapshot.whenTaken;
+	snapshot->asofTimestamp = serialized_snapshot.asofTimestamp;
 	snapshot->lsn = serialized_snapshot.lsn;
 	snapshot->snapXactCompletionCount = 0;
 	snapshot->haveDistribSnapshot = serialized_snapshot.haveDistribSnapshot;
