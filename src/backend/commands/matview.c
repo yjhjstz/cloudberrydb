@@ -4424,7 +4424,7 @@ get_prestate_rte_atversion(RangeTblEntry *rte, MV_TriggerTable *table,
 				relname, version);
 #else
 	appendStringInfo(&str,
-			"SELECT * FROM %s TABLESAMPLE BERNOULLI (10) REPEATABLE (1)",
+			"SELECT * FROM %s as of to_timestamp(1705372495)",
 				relname);
 #endif
 	/*
@@ -4576,7 +4576,7 @@ get_poststate_rte_atversion(RangeTblEntry *rte, MV_TriggerTable *table,
 				relname, version);
 #else
 	appendStringInfo(&str,
-			"SELECT * FROM %s TABLESAMPLE BERNOULLI (10) REPEATABLE (1)",
+			"SELECT * FROM %s as of to_timestamp(1705372495)",
 				relname);
 #endif
 	/* Get a subquery representing pre-state of the table */
